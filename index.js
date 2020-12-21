@@ -1,15 +1,21 @@
-const { Engine, Render, World, Runner, Bodies } = Matter;
+const { Engine, Render, World, Runner, Bodies, Body, Events } = Matter;
 // define the canvas width and height 
-const width = 600;
-const height = 600;
-const cells = 10;
-const unitLength = width / cells;
+const width = window.innerWidth;
+const height = window.innerHeight;
+// const cells = 7;
+const cellsHorizontal = 10;
+const cellsVertical = 3;
+const unitLengthX = width / cellsHorizontal;
+const unitLengthY = height / cellsVertical;
 const boundaryThickness = 5;
 
 // creates the engine
 const engine = Engine.create();
 // extract the world from the engine 
 const { world } = engine;
+
+// disable gravity on the y axis 
+engine.world.gravity.y = 0
 // creates the canvas to render objects 
 const render = Render.create( {
     element: document.body,
@@ -30,10 +36,10 @@ Runner.run( Runner.create(), engine );
 
 // walls 
 const walls = [
-    Bodies.rectangle( width / 2, 0, width, 40, { isStatic: true } ),
-    Bodies.rectangle( width / 2, height, width, 40, { isStatic: true } ),
-    Bodies.rectangle( 0, height / 2, 40, height, { isStatic: true } ),
-    Bodies.rectangle( width, height / 2, 40, height, { isStatic: true } ),
+    Bodies.rectangle( width / 2, 0, width, 2, { isStatic: true } ),
+    Bodies.rectangle( width / 2, height, width, 2, { isStatic: true } ),
+    Bodies.rectangle( 0, height / 2, 2, height, { isStatic: true } ),
+    Bodies.rectangle( width, height / 2, 2, height, { isStatic: true } ),
 ];
 
 World.add( world, walls );
@@ -49,23 +55,23 @@ const shuffle = ( array ) => {
 
 
 // Maze generation 
-const grid = Array( cells )
+const grid = Array( cellsVertical )
     .fill( null )
-    .map( () => Array( cells ).fill( false ) );
+    .map( () => Array( cellsHorizontal ).fill( false ) );
 
 
-const verticalsArray = Array( cells )
+const verticalsArray = Array( cellsVertical )
     .fill( null )
-    .map( () => Array( cells - 1 ).fill( false ) );
+    .map( () => Array( cellsHorizontal - 1 ).fill( false ) );
 
 
-const horizontalsArray = Array( cells - 1 )
+const horizontalsArray = Array( cellsVertical - 1 )
     .fill( null )
-    .map( () => Array( cells ).fill( false ) );
+    .map( () => Array( cellsHorizontal ).fill( false ) );
 
 
-const startRow = Math.floor( Math.random() * cells );
-const startColumn = Math.floor( Math.random() * cells );
+const startRow = Math.floor( Math.random() * cellsVertical );
+const startColumn = Math.floor( Math.random() * cellsHorizontal );
 
 
 const stepThrough = ( row, column ) => {
@@ -81,7 +87,7 @@ const stepThrough = ( row, column ) => {
     // for each neighbour, check if they are out of bounds 
     for ( let neighbour of neighbours ) {
         const [nextRow, nextColumn, direction] = neighbour;
-        if ( nextRow >= cells || nextRow < 0 || nextColumn >= cells || nextColumn < 0 )
+        if ( nextRow >= cellsVertical || nextRow < 0 || nextColumn >= cellsHorizontal || nextColumn < 0 )
             continue;
 
         // check if the cell has been visited before 
@@ -103,19 +109,7 @@ const stepThrough = ( row, column ) => {
 
         stepThrough( nextRow, nextColumn );
 
-
     }
-
-
-
-
-
-    // neighbours.forEach( ( current, index ) => {
-    //     if ( current.some( el => ( el >= cells || el < 0 ) ) ) {
-    //         neighbours.splice( index, 1 );
-    //     }
-    // } )
-    // console.log( neighbours );
 
 }
 
@@ -125,7 +119,10 @@ stepThrough( startRow, startColumn );
 horizontalsArray.forEach( ( row, rowIndex ) => {
     row.forEach( ( open, columnIndex ) => {
         if ( open ) return
-        const wall = Bodies.rectangle( ( unitLength * columnIndex + unitLength / 2 ), ( rowIndex * unitLength + unitLength ), unitLength, boundaryThickness, { isStatic: true } );
+        const wall = Bodies.rectangle( ( unitLengthX * columnIndex + unitLengthX / 2 ), ( rowIndex * unitLengthY + unitLengthY ), unitLengthX, boundaryThickness, {
+            isStatic: true, label: "wall",
+            render: { fillStyle: "tomato" }
+        } );
         World.add( world, wall );
     } )
 } );
@@ -135,11 +132,83 @@ horizontalsArray.forEach( ( row, rowIndex ) => {
 verticalsArray.forEach( ( row, rowIndex ) => {
     row.forEach( ( open, columnIndex ) => {
         if ( open ) return true;
-        const wall = Bodies.rectangle( ( columnIndex * unitLength + unitLength ), ( rowIndex * unitLength + unitLength / 2 ), boundaryThickness, unitLength, { isStatic: true } )
+        const wall = Bodies.rectangle( ( columnIndex * unitLengthX + unitLengthX ), ( rowIndex * unitLengthY + unitLengthY / 2 ), boundaryThickness, unitLengthY, {
+            isStatic: true, label: "wall",
+            render: { fillStyle: "tomato" }
+        } )
         World.add( world, wall );
 
     } )
 
+} )
+
+const goalDimensions = Math.max( unitLengthX, unitLengthY ) / 4
+// create the goal
+const goal = Bodies.rectangle( ( width - unitLengthX / 2 ), ( height - unitLengthY / 2 ), goalDimensions, goalDimensions, {
+    label: "goal",
+    isStatic: true, render: {
+        fillStyle: "green"
+    }
+} );
+
+World.add( world, goal );
+
+// create the ball 
+
+const ballRadius = Math.min( unitLengthX, unitLengthY ) / 4
+
+const ball = Bodies.circle( unitLengthX / 2, unitLengthY / 2, ballRadius, {
+    label: "ball",
+    render: {
+        fillStyle: "blue"
+    }
+} )
+
+World.add( world, ball );
+
+
+// keypress detection 
+
+document.addEventListener( 'keydown', ( e ) => {
+    const { x, y } = ball.velocity;
+    if ( e.keyCode === 38 ) {
+        // go up 
+        Body.setVelocity( ball, { x, y: y - 5 } );
+    }
+    if ( e.keyCode === 37 ) {
+        // go left 
+        Body.setVelocity( ball, { x: x - 5, y } );
+
+    }
+    if ( e.keyCode === 39 ) {
+        // go right
+        Body.setVelocity( ball, { x: x + 5, y } )
+    }
+
+    if ( e.keyCode === 40 ) {
+        // go down 
+        Body.setVelocity( ball, { x, y: y + 5 } );
+    }
+} );
+
+
+// win condition
+
+Events.on( engine, 'collisionStart', ( e ) => {
+
+    e.pairs.forEach( collision => {
+        const labels = [collision.bodyA.label, collision.bodyB.label];
+        if ( labels.includes( "ball" ) && labels.includes( "goal" ) ) {
+            engine.world.gravity.y = 1
+            world.bodies.forEach( shape => {
+                if ( shape.label == "wall" ) {
+                    Body.setStatic( shape, false )
+                    document.querySelector( ".winner" ).classList.remove( "hidden" );
+                }
+            } )
+
+        }
+    } )
 } )
 
 
